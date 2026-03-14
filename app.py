@@ -317,10 +317,13 @@ with tab1:
     for _, ev in events_df.iterrows():
         color = 'red' if ev['tariff_pct'] > 0 else 'green'
         fig.add_vline(x=ev['date'], line_width=1, line_dash='dot',
-                      line_color=color, opacity=0.4,
-                      annotation_text=ev['event'][:22],
-                      annotation_position="top right",
-                      annotation_font_size=8)
+                      line_color=color, opacity=0.4)
+        fig.add_annotation(
+            x=ev['date'], y=1.02, xref='x', yref='paper',
+            text=ev['event'][:18], showarrow=False,
+            font=dict(size=7, color=color),
+            textangle=-90, xanchor='left', yanchor='bottom'
+        )
 
     fig.update_layout(
         height=500, template='plotly_white', hovermode='x unified',
@@ -622,8 +625,10 @@ with tab5:
         text=[f"{v:.3f}" for v in wf_df['SHAP']] + [f"{y_pred[pred_idx]:.2f}%"],
         textposition='outside'
     ))
-    fig12.add_vline(x=base, line_dash='dash', line_color='gray', opacity=0.5,
-                    annotation_text=f'Baseline: {base:.2f}%')
+    fig12.add_vline(x=base, line_dash='dash', line_color='gray', opacity=0.5)
+    fig12.add_annotation(x=base, y=1.02, xref='x', yref='paper',
+                         text=f'Baseline: {base:.2f}%', showarrow=False,
+                         font=dict(size=10, color='gray'), xanchor='left')
     fig12.update_layout(
         height=420, template='plotly_white',
         title=f'Waterfall — Sample #{pred_idx} | Actual: {y_te.iloc[pred_idx]:.2f}% | Predicted: {y_pred[pred_idx]:.2f}%',
@@ -696,8 +701,10 @@ with tab6:
                     name=col,
                     line=dict(dash='dash' if col in intl_cols else 'solid', width=1.5)
                 ))
-        fig15.add_vline(x=0, line_dash='dash', line_color='red', opacity=0.7,
-                        annotation_text='Event day')
+        fig15.add_vline(x=0, line_dash='dash', line_color='red', opacity=0.7)
+        fig15.add_annotation(x=0, y=1.02, xref='x', yref='paper',
+                             text='Event day', showarrow=False,
+                             font=dict(size=10, color='red'), xanchor='left')
         fig15.add_hline(y=0, line_dash='dot', line_color='gray', opacity=0.4)
         fig15.update_layout(height=420, template='plotly_white',
                             title=f'Daily AR Profile: {sel_event}',
