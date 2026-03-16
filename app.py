@@ -110,8 +110,21 @@ HEADLINES = [
 def load_prices(tickers, start, end):
     raw = yf.download(list(tickers.keys()), start=start, end=end,
                       auto_adjust=True, progress=False)
-    prices = raw['Close'].copy()
-    prices.columns = [tickers[t] for t in prices.columns]
+    # Handle both flat columns and MultiIndex (yfinance >= 0.2.40)
+    if isinstance(raw.columns, pd.MultiIndex):
+        prices = raw['Close'].copy()
+        # columns are ticker symbols — map to display names
+        prices.columns = [tickers.get(t, t) for t in prices.columns]
+    else:
+        prices = raw['Close'].copy() if 'Close' in raw.columns else raw.copy()
+        if isinstance(prices, pd.Series):
+            # single ticker downloaded
+            prices = prices.to_frame()
+            prices.columns = list(tickers.values())[:1]
+        else:
+            prices.columns = [tickers.get(t, t) for t in prices.columns]
+    # Drop any all-NaN columns (tickers that failed to download)
+    prices = prices.dropna(axis=1, how='all')
     return prices
 
 @st.cache_data(show_spinner=False)
@@ -130,7 +143,18 @@ def compute_all_abnormal_returns(_returns_df, events, us_names, intl_names):
                     'is_us': col in us_names,
                 })
                 results.append(res)
-    df = pd.DataFrame(results).dropna(subset=['CAR'])
+    if not results:
+        # Return empty DataFrame with correct columns so app doesn't crash
+        return pd.DataFrame(columns=['event_date','ticker','alpha','beta',
+                                      'AR_mean','CAR','n_days','event','country',
+                                      'tariff_pct','is_escalation','is_us',
+                                      'year','month','ticker_encoded'])
+    df = pd.DataFrame(results)
+    if 'CAR' not in df.columns:
+        df['CAR'] = float('nan')
+    df = df.dropna(subset=['CAR'])
+    if df.empty:
+        return df
     df['year']  = df['event_date'].dt.year
     df['month'] = df['event_date'].dt.month
     df['ticker_encoded'] = pd.Categorical(df['ticker']).codes
@@ -154,7 +178,11 @@ def _compute_ar(event_date, col, returns_df, window=(-5,10), est=(-30,-2)):
 def train_model(results_df):
     ml = results_df.copy()
     feats = ['tariff_pct','beta','is_escalation','ticker_encoded','year','month','AR_mean','is_us']
+    # Only keep columns that exist
+    feats = [f for f in feats if f in ml.columns]
     ml = ml.dropna(subset=feats+['CAR'])
+    if len(ml) < 10:
+        return None, None, feats, None, None, None, None, 0.0, 0.0, None, None
     X = ml[feats].astype(float)
     y = ml['CAR'].astype(float)
     X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.25, random_state=42)
@@ -255,7 +283,11 @@ with st.spinner("⚙️ Computing CAPM abnormal returns..."):
 # TOP METRICS
 # ─────────────────────────────────────────────────────────────────────────────
 col1, col2, col3, col4, col5 = st.columns(5)
-esc_df = results_df[results_df['is_escalation']]
+esc_df = results_df[results_df['is_escalation']] if not results_df.empty else results_df
+
+if results_df.empty:
+    st.error("No data loaded — yfinance may be rate-limiting. Please wait 30 seconds and refresh the page.")
+    st.stop()
 
 with col1:
     st.markdown(f"""<div class="metric-card">
